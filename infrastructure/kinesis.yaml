@@ -1,0 +1,100 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Kinesis Data Stream for anomaly detection pipeline'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Name of the project
+  
+  Environment:
+    Type: String
+    Description: Environment name
+  
+  ShardCount:
+    Type: Number
+    Default: 1
+    MinValue: 0
+    MaxValue: 10
+    Description: Number of shards for the stream (0 for development mode)
+  
+  RetentionPeriodHours:
+    Type: Number
+    Default: 24
+    MinValue: 24
+    MaxValue: 168
+    Description: Data retention period in hours
+
+Conditions:
+  CreateStream: !Not [!Equals [!Ref ShardCount, 0]]
+
+Resources:
+  # Kinesis Data Stream (only created if ShardCount > 0)
+  DataStream:
+    Type: AWS::Kinesis::Stream
+    Condition: CreateStream
+    Properties:
+      Name: !Sub '${ProjectName}-${Environment}-stream'
+      ShardCount: !Ref ShardCount
+      RetentionPeriodHours: !Ref RetentionPeriodHours
+      StreamEncryption:
+        EncryptionType: KMS
+        KeyId: alias/aws/kinesis
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # CloudWatch Alarms for monitoring (only created if stream exists)
+  StreamIncomingRecordsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: CreateStream
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-stream-low-incoming-records'
+      AlarmDescription: Alert when incoming records drop below threshold
+      MetricName: IncomingRecords
+      Namespace: AWS/Kinesis
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 10
+      ComparisonOperator: LessThanThreshold
+      Dimensions:
+        - Name: StreamName
+          Value: !Ref DataStream
+      TreatMissingData: breaching
+
+  StreamIteratorAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: CreateStream
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-stream-iterator-age-high'
+      AlarmDescription: Alert when stream processing is lagging
+      MetricName: GetRecords.IteratorAgeMilliseconds
+      Namespace: AWS/Kinesis
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 60000  # 1 minute
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: StreamName
+          Value: !Ref DataStream
+      TreatMissingData: notBreaching
+
+Outputs:
+  StreamName:
+    Description: Name of the Kinesis stream
+    Value: !If [CreateStream, !Ref DataStream, "NO-STREAM"]
+
+  StreamArn:
+    Description: ARN of the Kinesis stream
+    Value: !If [CreateStream, !GetAtt DataStream.Arn, "NO-STREAM"]
+
+  StreamIncomingRecordsAlarmName:
+    Description: Name of the incoming records alarm
+    Value: !If [CreateStream, !Ref StreamIncomingRecordsAlarm, "NO-ALARM"]
+
+  StreamIteratorAgeAlarmName:
+    Description: Name of the iterator age alarm
+    Value: !If [CreateStream, !Ref StreamIteratorAgeAlarm, "NO-ALARM"]

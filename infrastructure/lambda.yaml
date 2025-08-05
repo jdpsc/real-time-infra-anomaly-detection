@@ -1,0 +1,168 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lambda function for processing Kinesis stream data'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Name of the project
+  
+  Environment:
+    Type: String
+    Description: Environment name
+  
+  StreamArn:
+    Type: String
+    Description: ARN of the Kinesis stream
+  
+  SageMakerRoleArn:
+    Type: String
+    Description: ARN of the SageMaker role
+  
+  LambdaBucketName:
+    Type: String
+    Description: S3 bucket containing Lambda deployment package
+  
+  LogLevel:
+    Type: String
+    Description: Logging level for Lambda function
+    Default: INFO
+    AllowedValues: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+
+Resources:
+  # IAM Role for Lambda
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-lambda-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaKinesisExecutionRole
+      Policies:
+        - PolicyName: SageMakerInvokeEndpoint
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sagemaker:InvokeEndpoint
+                Resource: !Sub 'arn:aws:sagemaker:${AWS::Region}:${AWS::AccountId}:endpoint/${ProjectName}-endpoint'
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Lambda Function
+  AnomalyDetectorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${ProjectName}-${Environment}-anomaly-detector'
+      Runtime: python3.8
+      Handler: handler.lambda_handler
+      Code:
+        S3Bucket: !Ref LambdaBucketName
+        S3Key: lambda/function.zip
+      MemorySize: 512
+      Timeout: 60
+      Environment:
+        Variables:
+          ENDPOINT_NAME: !Sub '${ProjectName}-endpoint'
+          REGION: !Ref AWS::Region
+          LOG_LEVEL: !Ref LogLevel
+      Role: !GetAtt LambdaRole.Arn
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Event Source Mapping for Kinesis
+  KinesisEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !Ref StreamArn
+      FunctionName: !Ref AnomalyDetectorFunction
+      StartingPosition: LATEST
+      BatchSize: 100
+      MaximumBatchingWindowInSeconds: 5
+      ParallelizationFactor: 10
+      MaximumRecordAgeInSeconds: 3600
+      BisectBatchOnFunctionError: true
+      MaximumRetryAttempts: 3
+
+  # CloudWatch Log Group
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${AnomalyDetectorFunction}'
+      RetentionInDays: 7
+
+  # CloudWatch Alarms
+  LambdaErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-lambda-errors'
+      AlarmDescription: Alert on Lambda function errors
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AnomalyDetectorFunction
+      TreatMissingData: notBreaching
+
+  LambdaThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub '${ProjectName}-${Environment}-lambda-throttles'
+      AlarmDescription: Alert on Lambda function throttling
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AnomalyDetectorFunction
+      TreatMissingData: notBreaching
+
+Outputs:
+  FunctionName:
+    Description: Name of the Lambda function
+    Value: !Ref AnomalyDetectorFunction
+
+  FunctionArn:
+    Description: ARN of the Lambda function
+    Value: !GetAtt AnomalyDetectorFunction.Arn
+
+  LambdaRoleArn:
+    Description: ARN of the Lambda execution role
+    Value: !GetAtt LambdaRole.Arn
+
+  LogGroupName:
+    Description: CloudWatch Log Group name
+    Value: !Ref LambdaLogGroup

@@ -1,0 +1,145 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Main CloudFormation template for Real-Time Anomaly Detection Pipeline'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Default: anomaly-detection
+    Description: Name of the project
+  
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Environment name
+  
+  KinesisShardCount:
+    Type: Number
+    Default: 1
+    MinValue: 0
+    MaxValue: 10
+    Description: Number of Kinesis shards (0 for development mode to save costs)
+  
+  LogLevel:
+    Type: String
+    Default: INFO
+    AllowedValues: [DEBUG, INFO, WARNING, ERROR, CRITICAL]
+    Description: Logging level for Lambda function
+
+Conditions:
+  CreateKinesisResources: !Not [!Equals [!Ref KinesisShardCount, 0]]
+
+Resources:
+  # S3 Buckets
+  S3Stack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./s3.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        Environment: !Ref Environment
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Kinesis Stream
+  KinesisStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: ./kinesis.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        Environment: !Ref Environment
+        ShardCount: !Ref KinesisShardCount
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # SageMaker Resources
+  SageMakerStack:
+    Type: AWS::CloudFormation::Stack
+    DependsOn: S3Stack
+    Properties:
+      TemplateURL: ./sagemaker.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        Environment: !Ref Environment
+        DataBucketName: !GetAtt S3Stack.Outputs.DataBucketName
+        ModelBucketName: !GetAtt S3Stack.Outputs.ModelBucketName
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Lambda Function (only created if Kinesis stream exists)
+  LambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Condition: CreateKinesisResources
+    DependsOn: 
+      - KinesisStack
+      - SageMakerStack
+    Properties:
+      TemplateURL: ./lambda.yaml
+      Parameters:
+        ProjectName: !Ref ProjectName
+        Environment: !Ref Environment
+        StreamArn: !GetAtt KinesisStack.Outputs.StreamArn
+        SageMakerRoleArn: !GetAtt SageMakerStack.Outputs.SageMakerRoleArn
+        LambdaBucketName: !GetAtt S3Stack.Outputs.LambdaBucketName
+        LogLevel: !Ref LogLevel
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  DataBucketName:
+    Description: S3 bucket for training data
+    Value: !GetAtt S3Stack.Outputs.DataBucketName
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-DataBucket'
+
+  ModelBucketName:
+    Description: S3 bucket for model artifacts
+    Value: !GetAtt S3Stack.Outputs.ModelBucketName
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-ModelBucket'
+
+  LambdaBucketName:
+    Description: S3 bucket for Lambda deployment packages
+    Value: !GetAtt S3Stack.Outputs.LambdaBucketName
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-LambdaBucket'
+
+  StreamName:
+    Description: Kinesis stream name
+    Value: !GetAtt KinesisStack.Outputs.StreamName
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-StreamName'
+
+  StreamArn:
+    Description: Kinesis stream ARN
+    Value: !GetAtt KinesisStack.Outputs.StreamArn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-StreamArn'
+
+  LambdaFunctionName:
+    Description: Lambda function name
+    Value: !If [CreateKinesisResources, !GetAtt LambdaStack.Outputs.FunctionName, "NO-LAMBDA"]
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-LambdaFunction'
+
+  SageMakerRoleArn:
+    Description: SageMaker execution role ARN
+    Value: !GetAtt SageMakerStack.Outputs.SageMakerRoleArn
+    Export:
+      Name: !Sub '${ProjectName}-${Environment}-SageMakerRole'

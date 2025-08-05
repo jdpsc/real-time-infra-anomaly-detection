@@ -1,0 +1,83 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'SageMaker resources for anomaly detection pipeline'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Name of the project
+  
+  Environment:
+    Type: String
+    Description: Environment name
+  
+  DataBucketName:
+    Type: String
+    Description: S3 bucket containing training data
+  
+  ModelBucketName:
+    Type: String
+    Description: S3 bucket for model artifacts
+
+Resources:
+  # IAM Role for SageMaker
+  SageMakerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-${Environment}-sagemaker-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - sagemaker.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${DataBucketName}'
+                  - !Sub 'arn:aws:s3:::${DataBucketName}/*'
+                  - !Sub 'arn:aws:s3:::${ModelBucketName}'
+                  - !Sub 'arn:aws:s3:::${ModelBucketName}/*'
+              - Effect: Allow
+                Action:
+                  - ecr:GetAuthorizationToken
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: '*'
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Note: SageMaker models, endpoint configurations, and endpoints
+  # will be created after model training via the deploy.py script
+
+Outputs:
+  SageMakerRoleArn:
+    Description: ARN of the SageMaker execution role
+    Value: !GetAtt SageMakerRole.Arn
+
+  SageMakerRoleName:
+    Description: Name of the SageMaker execution role
+    Value: !Ref SageMakerRole

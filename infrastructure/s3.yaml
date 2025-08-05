@@ -1,0 +1,103 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'S3 buckets for anomaly detection pipeline'
+
+Parameters:
+  ProjectName:
+    Type: String
+    Description: Name of the project
+  
+  Environment:
+    Type: String
+    Description: Environment name
+
+Resources:
+  # Bucket for training data
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-${Environment}-data-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldTrainingData
+            Status: Enabled
+            ExpirationInDays: 30
+            NoncurrentVersionExpirationInDays: 7
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Bucket for model artifacts
+  ModelBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-${Environment}-models-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+  # Bucket for Lambda deployment packages
+  LambdaBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub '${ProjectName}-${Environment}-lambda-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+
+Outputs:
+  DataBucketName:
+    Description: Name of the data bucket
+    Value: !Ref DataBucket
+
+  DataBucketArn:
+    Description: ARN of the data bucket
+    Value: !GetAtt DataBucket.Arn
+
+  ModelBucketName:
+    Description: Name of the model bucket
+    Value: !Ref ModelBucket
+
+  ModelBucketArn:
+    Description: ARN of the model bucket
+    Value: !GetAtt ModelBucket.Arn
+
+  LambdaBucketName:
+    Description: Name of the Lambda bucket
+    Value: !Ref LambdaBucket
+
+  LambdaBucketArn:
+    Description: ARN of the Lambda bucket
+    Value: !GetAtt LambdaBucket.Arn
