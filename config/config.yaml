@@ -1,0 +1,60 @@
+# Configuration for Real-Time Anomaly Detection Pipeline
+
+aws:
+  region: "eu-west-1"
+  account_id: "${AWS_ACCOUNT_ID}"  # Set via environment variable
+
+cloudformation:
+  stack_name: anomaly-detection-stack
+
+s3:
+  data_bucket: anomaly-detection-dev-data
+  model_bucket: anomaly-detection-dev-models
+  lambda_bucket: anomaly-detection-dev-lambda
+
+kinesis:
+  stream_name: anomaly-detection-stream
+  shard_count: 1
+  retention_period_hours: 24
+
+sagemaker:
+  training_instance_type: ml.m5.xlarge
+  inference_instance_type: ml.t2.medium
+  model_name: anomaly-detection-model
+  endpoint_name: anomaly-detection-endpoint
+  algorithm: randomcutforest  # AWS built-in algorithm
+
+lambda:
+  function_name: anomaly-detector
+  memory_size: 512
+  timeout: 60
+  batch_size: 100
+
+data:
+  training_samples: 100000
+  features: 4
+  anomaly_rate: 0.01  # 1% anomalies
+  time_series_freq: "1min"
+  feature_names:
+    - cpu_usage
+    - memory_usage
+    - network_throughput
+    - disk_io
+
+model:
+  # Random Cut Forest parameters
+  num_trees: 100
+  num_samples_per_tree: 256
+  anomaly_score_threshold: 3.0  # Standard deviations
+  
+streaming:
+  records_per_second: 10
+  test_duration_seconds: 300  # 5 minutes
+
+monitoring:
+  cloudwatch_namespace: AnomalyDetection
+  alarm_threshold: 0.05  # 5% anomaly rate triggers alarm
+
+logging:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
