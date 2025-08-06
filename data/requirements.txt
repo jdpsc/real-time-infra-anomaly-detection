@@ -1,0 +1,6 @@
+# Data generation and upload requirements
+numpy>=1.23.0
+pandas>=1.5.0
+boto3>=1.26.0
+pyyaml>=6.0
+scikit-learn>=1.2.0
