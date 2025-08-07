@@ -1,0 +1,4 @@
+# Model training and deployment requirements
+boto3>=1.26.0
+sagemaker>=2.150.0
+pyyaml>=6.0
