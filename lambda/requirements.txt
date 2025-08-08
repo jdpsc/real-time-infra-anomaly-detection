@@ -1,0 +1,3 @@
+# Lambda function requirements
+# Note: boto3 is already available in Lambda runtime
+# Only include additional dependencies here
