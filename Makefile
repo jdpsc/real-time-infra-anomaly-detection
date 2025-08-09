@@ -6,7 +6,7 @@ PYTHON := $(VENV)/bin/python
 UV := uv
 AWS := aws
 STACK_NAME := anomaly-detection-stack
-REGION := $(shell $(AWS) configure get region || echo "us-east-1")
+REGION := $(shell $(AWS) configure get region || echo "eu-west-1")
 AWS_ACCOUNT_ID := $(shell $(AWS) sts get-caller-identity --query Account --output text 2>/dev/null || echo "")
 S3_BUCKET = $(shell $(AWS) cloudformation describe-stacks --stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`DataBucketName`].OutputValue' --output text 2>/dev/null || echo "anomaly-detection-data-bucket")
 LAMBDA_BUCKET = $(shell $(AWS) cloudformation describe-stacks --stack-name $(STACK_NAME) --query 'Stacks[0].Outputs[?OutputKey==`LambdaBucketName`].OutputValue' --output text 2>/dev/null || echo "anomaly-detection-lambda-bucket")
