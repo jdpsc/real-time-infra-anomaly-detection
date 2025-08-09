@@ -23,7 +23,7 @@ cloudwatch = boto3.client('cloudwatch')
 
 # Environment variables
 ENDPOINT_NAME = os.environ.get('ENDPOINT_NAME', 'anomaly-detection-endpoint')
-REGION = os.environ.get('REGION', 'us-east-1')
+REGION = os.environ.get('REGION', 'eu-west-1')
 ANOMALY_THRESHOLD = float(os.environ.get('ANOMALY_THRESHOLD', '3.0'))
 
 

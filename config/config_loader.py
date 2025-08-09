@@ -128,3 +128,33 @@ def load_config(config_path: str = None, required_keys: List[str] = None) -> Dic
         raise ValueError(f"Invalid YAML configuration: {e}")
     except Exception as e:
         raise RuntimeError(f"Failed to load configuration: {e}")
+
+
+def get_default_aws_region() -> str:
+    """
+    Get the default AWS region used consistently across the project.
+    
+    This function provides a single source of truth for the default AWS region
+    to ensure consistency between all components (Lambda, Makefile, scripts).
+    
+    Returns:
+        str: Default AWS region ('eu-west-1')
+    """
+    return 'eu-west-1'
+
+
+def get_aws_region_from_config(config_path: str = None) -> str:
+    """
+    Get AWS region from configuration file with consistent fallback.
+    
+    Args:
+        config_path: Path to config file. If None, uses default config/config.yaml
+        
+    Returns:
+        str: AWS region from config or default fallback
+    """
+    try:
+        config = load_config(config_path, required_keys=['aws.region'])
+        return config['aws']['region']
+    except Exception:
+        return get_default_aws_region()
