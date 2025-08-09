@@ -1,0 +1,4 @@
+# Streaming client requirements
+boto3>=1.26.0
+numpy>=1.23.0
+pyyaml>=6.0
